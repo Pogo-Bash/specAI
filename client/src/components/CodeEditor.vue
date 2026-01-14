@@ -651,24 +651,58 @@ watch(() => currentCode.value, () => {
   })
 })
 
-// Listen for code updates from collaboration
+// Helper to save scroll position and mark as remote update
+const prepareForRemoteUpdate = () => {
+  if (editorTextarea.value) {
+    savedScrollPosition.value = {
+      top: editorTextarea.value.scrollTop,
+      left: editorTextarea.value.scrollLeft
+    }
+  }
+  isRemoteUpdate.value = true
+}
+
+// Track if we've registered socket handlers
+const socketHandlersRegistered = ref(false)
+
+// Register socket handlers for collaboration scroll fix
+function registerSocketHandlers(socket) {
+  if (!socket || socketHandlersRegistered.value) return
+
+  // Handle legacy code-update events (for editor store updates)
+  socket.on('code-update', (data) => {
+    prepareForRemoteUpdate()
+    editorStore.setCode(data.editorType, data.content)
+  })
+
+  // Handle file-updated events (for file system store updates)
+  // This is CRITICAL: The editor is bound to fsStore.activeFileContent,
+  // so we must also handle file-updated to prevent scroll jumping
+  socket.on('file-updated', (data) => {
+    // Only prepare if this update affects the currently active file
+    if (data.path === fsStore.activeFilePath) {
+      prepareForRemoteUpdate()
+    }
+  })
+
+  socketHandlersRegistered.value = true
+}
+
+// Watch for socket connection to register handlers
+// This handles the case where socket is created after component mounts
+watch(() => collabStore.socket, (newSocket) => {
+  if (newSocket) {
+    registerSocketHandlers(newSocket)
+  }
+}, { immediate: true })
+
+// Initialize on mount
 onMounted(() => {
   updateHighlighting()
 
+  // Try to register handlers if socket already exists
   if (collabStore.socket) {
-    collabStore.socket.on('code-update', (data) => {
-      // Save scroll position BEFORE updating code to prevent auto-scroll
-      if (editorTextarea.value) {
-        savedScrollPosition.value = {
-          top: editorTextarea.value.scrollTop,
-          left: editorTextarea.value.scrollLeft
-        }
-      }
-
-      // Mark as remote update so watcher restores scroll position
-      isRemoteUpdate.value = true
-      editorStore.setCode(data.editorType, data.content)
-    })
+    registerSocketHandlers(collabStore.socket)
   }
 
   // Initialize editor height and scroll position
