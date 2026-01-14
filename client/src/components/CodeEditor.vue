@@ -318,15 +318,20 @@ watch(() => fsStore.activeFilePath, () => {
 })
 
 function handleCodeChange() {
+  // Mark this as a local edit so the watcher knows to sync scroll
+  isLocalEdit.value = true
+
   // Update syntax highlighting
   updateHighlighting()
 
-  // CRITICAL: Ensure textarea and highlight layers stay synced
+  // Sync textarea and highlight layers for local edits
   nextTick(() => {
     if (editorTextarea.value && highlightLayer.value) {
       highlightLayer.value.scrollTop = editorTextarea.value.scrollTop
       highlightLayer.value.scrollLeft = editorTextarea.value.scrollLeft
     }
+    // Reset the flag after this tick
+    isLocalEdit.value = false
   })
 
   // Check for emoji autocomplete
@@ -617,50 +622,33 @@ function handleKeyDown(event) {
 }
 
 // Track scroll position for remote updates to prevent auto-scrolling
-const savedScrollPosition = ref({ top: 0, left: 0 })
-// Track the last remote update count we processed
-const lastProcessedRemoteUpdate = ref(0)
-
-// Watch for remote updates from the file system store
-// This is more reliable than socket handlers because it's triggered
-// BEFORE the file content changes (via remoteUpdateCount increment)
-watch(() => fsStore.remoteUpdateCount, (newCount) => {
-  // Save scroll position when a remote update is about to happen
-  if (editorTextarea.value && newCount > lastProcessedRemoteUpdate.value) {
-    savedScrollPosition.value = {
-      top: editorTextarea.value.scrollTop,
-      left: editorTextarea.value.scrollLeft
-    }
-  }
-})
+// Simple approach: track if the change came from local user input
+const isLocalEdit = ref(false)
 
 // Watch for code changes from collaboration or other sources
 watch(() => currentCode.value, () => {
   updateHighlighting()
 
-  // Force scroll sync between textarea and highlight layers
   nextTick(() => {
     if (editorTextarea.value) {
-      // If there are unprocessed remote updates, restore the saved scroll position
-      if (fsStore.remoteUpdateCount > lastProcessedRemoteUpdate.value) {
-        editorTextarea.value.scrollTop = savedScrollPosition.value.top
-        editorTextarea.value.scrollLeft = savedScrollPosition.value.left
-        lastProcessedRemoteUpdate.value = fsStore.remoteUpdateCount
-      }
+      // Only sync scroll position if this was a LOCAL edit
+      // For remote updates, don't touch scroll at all - this prevents the jump
+      if (isLocalEdit.value) {
+        scrollPosition.value = {
+          top: editorTextarea.value.scrollTop,
+          left: editorTextarea.value.scrollLeft
+        }
 
-      scrollPosition.value = {
-        top: editorTextarea.value.scrollTop,
-        left: editorTextarea.value.scrollLeft
+        // Sync highlight layer with textarea scroll (user is scrolling/typing)
+        if (highlightLayer.value) {
+          highlightLayer.value.scrollTop = editorTextarea.value.scrollTop
+          highlightLayer.value.scrollLeft = editorTextarea.value.scrollLeft
+        }
+        if (lineNumbers.value) {
+          lineNumbers.value.scrollTop = editorTextarea.value.scrollTop
+        }
       }
-
-      // Ensure highlight layer stays synced
-      if (highlightLayer.value) {
-        highlightLayer.value.scrollTop = editorTextarea.value.scrollTop
-        highlightLayer.value.scrollLeft = editorTextarea.value.scrollLeft
-      }
-      if (lineNumbers.value) {
-        lineNumbers.value.scrollTop = editorTextarea.value.scrollTop
-      }
+      // For remote updates: highlighting is updated but scroll is untouched
     }
   })
 })
