@@ -618,7 +618,21 @@ function handleKeyDown(event) {
 
 // Track scroll position for remote updates to prevent auto-scrolling
 const savedScrollPosition = ref({ top: 0, left: 0 })
-const isRemoteUpdate = ref(false)
+// Track the last remote update count we processed
+const lastProcessedRemoteUpdate = ref(0)
+
+// Watch for remote updates from the file system store
+// This is more reliable than socket handlers because it's triggered
+// BEFORE the file content changes (via remoteUpdateCount increment)
+watch(() => fsStore.remoteUpdateCount, (newCount) => {
+  // Save scroll position when a remote update is about to happen
+  if (editorTextarea.value && newCount > lastProcessedRemoteUpdate.value) {
+    savedScrollPosition.value = {
+      top: editorTextarea.value.scrollTop,
+      left: editorTextarea.value.scrollLeft
+    }
+  }
+})
 
 // Watch for code changes from collaboration or other sources
 watch(() => currentCode.value, () => {
@@ -627,11 +641,11 @@ watch(() => currentCode.value, () => {
   // Force scroll sync between textarea and highlight layers
   nextTick(() => {
     if (editorTextarea.value) {
-      // If this was a remote update, restore the saved scroll position
-      if (isRemoteUpdate.value) {
+      // If there are unprocessed remote updates, restore the saved scroll position
+      if (fsStore.remoteUpdateCount > lastProcessedRemoteUpdate.value) {
         editorTextarea.value.scrollTop = savedScrollPosition.value.top
         editorTextarea.value.scrollLeft = savedScrollPosition.value.left
-        isRemoteUpdate.value = false // Reset flag
+        lastProcessedRemoteUpdate.value = fsStore.remoteUpdateCount
       }
 
       scrollPosition.value = {
@@ -651,59 +665,9 @@ watch(() => currentCode.value, () => {
   })
 })
 
-// Helper to save scroll position and mark as remote update
-const prepareForRemoteUpdate = () => {
-  if (editorTextarea.value) {
-    savedScrollPosition.value = {
-      top: editorTextarea.value.scrollTop,
-      left: editorTextarea.value.scrollLeft
-    }
-  }
-  isRemoteUpdate.value = true
-}
-
-// Track if we've registered socket handlers
-const socketHandlersRegistered = ref(false)
-
-// Register socket handlers for collaboration scroll fix
-function registerSocketHandlers(socket) {
-  if (!socket || socketHandlersRegistered.value) return
-
-  // Handle legacy code-update events (for editor store updates)
-  socket.on('code-update', (data) => {
-    prepareForRemoteUpdate()
-    editorStore.setCode(data.editorType, data.content)
-  })
-
-  // Handle file-updated events (for file system store updates)
-  // This is CRITICAL: The editor is bound to fsStore.activeFileContent,
-  // so we must also handle file-updated to prevent scroll jumping
-  socket.on('file-updated', (data) => {
-    // Only prepare if this update affects the currently active file
-    if (data.path === fsStore.activeFilePath) {
-      prepareForRemoteUpdate()
-    }
-  })
-
-  socketHandlersRegistered.value = true
-}
-
-// Watch for socket connection to register handlers
-// This handles the case where socket is created after component mounts
-watch(() => collabStore.socket, (newSocket) => {
-  if (newSocket) {
-    registerSocketHandlers(newSocket)
-  }
-}, { immediate: true })
-
 // Initialize on mount
 onMounted(() => {
   updateHighlighting()
-
-  // Try to register handlers if socket already exists
-  if (collabStore.socket) {
-    registerSocketHandlers(collabStore.socket)
-  }
 
   // Initialize editor height and scroll position
   nextTick(() => {
