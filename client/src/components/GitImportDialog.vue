@@ -123,17 +123,40 @@
         <div class="bg-base-200 rounded-lg p-4 mb-4">
           <div class="flex justify-between items-center mb-2">
             <span class="font-semibold text-sm">Files to import:</span>
-            <span class="text-sm opacity-70">{{ previewFiles.length }} files ({{ totalSize }})</span>
+            <span class="text-sm opacity-70">{{ selectedFiles.size }} of {{ previewFiles.length }} selected ({{ selectedSize }})</span>
           </div>
+
+          <!-- Select All / Deselect All -->
+          <div class="flex gap-2 mb-2">
+            <button @click="selectAll" class="btn btn-xs btn-ghost">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Select All
+            </button>
+            <button @click="deselectAll" class="btn btn-xs btn-ghost">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Deselect All
+            </button>
+          </div>
+
           <div class="max-h-64 overflow-y-auto">
-            <div
+            <label
               v-for="file in previewFiles"
               :key="file.path"
-              class="flex items-center justify-between px-2 py-1 text-sm font-mono hover:bg-base-300 rounded"
+              class="flex items-center gap-2 px-2 py-1 text-sm font-mono hover:bg-base-300 rounded cursor-pointer"
             >
-              <span class="truncate flex-1 mr-2">{{ file.path }}</span>
+              <input
+                type="checkbox"
+                :checked="selectedFiles.has(file.path)"
+                @change="toggleFile(file.path)"
+                class="checkbox checkbox-sm checkbox-primary"
+              />
+              <span class="truncate flex-1">{{ file.path }}</span>
               <span class="text-xs opacity-50 whitespace-nowrap">{{ formatFileSize(file.size) }}</span>
-            </div>
+            </label>
           </div>
         </div>
 
@@ -200,11 +223,11 @@
         <button
           v-if="step === 'preview'"
           @click="confirmImport"
-          :disabled="isLoading || previewFiles.length === 0"
+          :disabled="isLoading || selectedFiles.size === 0"
           class="btn btn-primary"
         >
           <span v-if="isLoading" class="loading loading-spinner loading-sm"></span>
-          <span v-else>Import {{ previewFiles.length }} files</span>
+          <span v-else>Import {{ selectedFiles.size }} files</span>
         </button>
       </div>
     </div>
@@ -246,6 +269,7 @@ const branches = ref([])
 const selectedBranch = ref('')
 const subPath = ref('')
 const previewFiles = ref([])
+const selectedFiles = ref(new Set())
 const importMode = ref('merge')
 const isLoading = ref(false)
 const loadingMessage = ref('')
@@ -253,8 +277,10 @@ const error = ref('')
 const progress = ref({ current: 0, total: 0 })
 
 // Computed
-const totalSize = computed(() => {
-  const bytes = previewFiles.value.reduce((sum, f) => sum + f.size, 0)
+const selectedSize = computed(() => {
+  const bytes = previewFiles.value
+    .filter(f => selectedFiles.value.has(f.path))
+    .reduce((sum, f) => sum + f.size, 0)
   return formatFileSize(bytes)
 })
 
@@ -275,6 +301,7 @@ function reset() {
   selectedBranch.value = ''
   subPath.value = ''
   previewFiles.value = []
+  selectedFiles.value = new Set()
   importMode.value = 'merge'
   isLoading.value = false
   loadingMessage.value = ''
@@ -282,11 +309,31 @@ function reset() {
   progress.value = { current: 0, total: 0 }
 }
 
+// File selection functions
+function selectAll() {
+  selectedFiles.value = new Set(previewFiles.value.map(f => f.path))
+}
+
+function deselectAll() {
+  selectedFiles.value = new Set()
+}
+
+function toggleFile(path) {
+  const newSet = new Set(selectedFiles.value)
+  if (newSet.has(path)) {
+    newSet.delete(path)
+  } else {
+    newSet.add(path)
+  }
+  selectedFiles.value = newSet
+}
+
 function goBack() {
   error.value = ''
   if (step.value === 'preview') {
     step.value = 'branch'
     previewFiles.value = []
+    selectedFiles.value = new Set()
   } else if (step.value === 'branch') {
     step.value = 'url'
     repoInfo.value = null
@@ -363,6 +410,9 @@ async function fetchPreview() {
       previewFiles.value = files
     }
 
+    // Auto-select all files by default
+    selectedFiles.value = new Set(previewFiles.value.map(f => f.path))
+
     step.value = 'preview'
   } catch (err) {
     error.value = err.message
@@ -376,11 +426,14 @@ async function confirmImport() {
   error.value = ''
   isLoading.value = true
   loadingMessage.value = 'Downloading files...'
-  progress.value = { current: 0, total: previewFiles.value.length }
+
+  // Only import selected files
+  const filesToImport = previewFiles.value.filter(f => selectedFiles.value.has(f.path))
+  progress.value = { current: 0, total: filesToImport.length }
 
   try {
     // Import files from GitHub
-    const importedTree = await importFromGitHub(previewFiles.value, (current, total) => {
+    const importedTree = await importFromGitHub(filesToImport, (current, total) => {
       progress.value = { current, total }
     })
 
@@ -411,7 +464,7 @@ async function confirmImport() {
     }
 
     emit('import', {
-      count: previewFiles.value.length,
+      count: filesToImport.length,
       mode: importMode.value,
       repo: repoInfo.value.full_name
     })
