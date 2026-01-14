@@ -49,6 +49,10 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
   // Expanded directories tracking
   const expandedDirs = ref(new Set(['/']))
 
+  // Track remote updates for scroll position restoration
+  // This counter increments whenever a remote update affects the active file
+  const remoteUpdateCount = ref(0)
+
   // Computed: Get active file content
   const activeFileContent = computed(() => {
     const file = getFile(activeFilePath.value)
@@ -212,6 +216,12 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
     const file = getFile(path)
     if (!file) {
       throw new Error('File not found')
+    }
+
+    // If this is a remote update (skipBroadcast=true) affecting the active file,
+    // increment the counter so CodeEditor can restore scroll position
+    if (skipBroadcast && path === activeFilePath.value) {
+      remoteUpdateCount.value++
     }
 
     file.content = content
@@ -617,6 +627,7 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
     previewHtmlFile,
     previewCssFile,
     previewJsFile,
+    remoteUpdateCount,
 
     // Computed
     activeFileContent,
