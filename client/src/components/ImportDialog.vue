@@ -206,6 +206,7 @@
 import { ref, computed, watch } from 'vue'
 import { useFileSystemStore } from '../stores/fileSystem'
 import { useCollaborationStore } from '../stores/collaboration'
+import { useProjectStore } from '../stores/project'
 import { getZipPreview, importFilesFromZip } from '../composables/useFileExport'
 import {
   parseGitHubUrl,
@@ -224,6 +225,7 @@ const emit = defineEmits(['close', 'import'])
 
 const fsStore = useFileSystemStore()
 const collabStore = useCollaborationStore()
+const projectStore = useProjectStore()
 
 // Common state
 const source = ref('zip') // 'zip' | 'github'
@@ -443,6 +445,21 @@ async function confirmImport() {
       const indexFile = allFiles.find(f => f.endsWith('index.html'))
       const readmeFile = allFiles.find(f => f.toLowerCase().includes('readme'))
       fsStore.activeFilePath = indexFile || readmeFile || allFiles[0]
+    }
+
+    // Set workspace name and source based on import type
+    if (source.value === 'zip') {
+      // ZIP import: use filename without .zip extension
+      const fileName = selectedZipFile.value?.name || 'imported'
+      const workspaceName = fileName.replace(/\.zip$/i, '')
+      projectStore.setWorkspaceName(workspaceName)
+      projectStore.setWorkspaceSource({ type: 'zip', name: fileName })
+    } else if (source.value === 'github') {
+      // GitHub import: use repo name
+      const repoName = repoInfo.value?.name || 'imported'
+      const fullName = repoInfo.value?.full_name || repoName
+      projectStore.setWorkspaceName(repoName)
+      projectStore.setWorkspaceSource({ type: 'github', name: fullName })
     }
 
     // Sync with collaborators

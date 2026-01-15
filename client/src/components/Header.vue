@@ -3,34 +3,13 @@
     <div class="flex justify-between items-center">
       <!-- Left Section -->
       <div class="flex items-center gap-4">
-        <button
-          @click="toggleMenu"
-          class="btn btn-sm btn-square btn-ghost"
-          title="Projects Menu"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke-width="1.5"
-            stroke="currentColor"
-            class="w-6 h-6"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
-            />
-          </svg>
-        </button>
-
         <input
-          v-model="editableProjectName"
-          @blur="updateProjectName"
+          v-model="editableWorkspaceName"
+          @blur="updateWorkspaceName"
           @keyup.enter="$event.target.blur()"
           type="text"
-          class="text-lg font-semibold bg-transparent border-0 focus:outline-none focus:ring-2 focus:ring-primary rounded px-2 py-1 -ml-2"
-          placeholder="Project Name"
+          class="text-lg font-semibold bg-transparent border-0 focus:outline-none focus:ring-2 focus:ring-primary rounded px-2 py-1"
+          placeholder="Workspace Name"
           maxlength="50"
         />
       </div>
@@ -148,37 +127,32 @@ const fsStore = useFileSystemStore()
 
 const joinRoomCode = ref('')
 const userName = ref('')
-const editableProjectName = ref('')
+const editableWorkspaceName = ref('')
 
-const currentProjectName = computed(() => projectStore.currentProjectName)
+const workspaceName = computed(() => projectStore.workspaceName)
 const inCollabSession = computed(() => collabStore.inCollabSession)
 const showCollabMenu = computed(() => uiStore.showCollabMenu)
 const roomCode = computed(() => collabStore.roomCode)
 
-// Initialize editable project name
-editableProjectName.value = currentProjectName.value
+// Initialize editable workspace name
+editableWorkspaceName.value = workspaceName.value
 
-// Watch for project changes
-watch(currentProjectName, (newName) => {
-  editableProjectName.value = newName
+// Watch for workspace name changes
+watch(workspaceName, (newName) => {
+  editableWorkspaceName.value = newName
 })
-
-function toggleMenu() {
-  projectStore.toggleMenu()
-}
 
 function toggleFullscreen() {
   uiStore.toggleFullscreen()
 }
 
-function updateProjectName() {
-  const newName = editableProjectName.value.trim()
-  if (newName && newName !== projectStore.currentProjectName) {
-    projectStore.currentProjectName = newName
-    // Auto-save will trigger automatically via the watcher in App.vue
+function updateWorkspaceName() {
+  const newName = editableWorkspaceName.value.trim()
+  if (newName && newName !== projectStore.workspaceName) {
+    projectStore.setWorkspaceName(newName)
   } else if (!newName) {
     // Reset to current name if empty
-    editableProjectName.value = projectStore.currentProjectName
+    editableWorkspaceName.value = projectStore.workspaceName
   }
 }
 

@@ -307,7 +307,9 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useFileSystemStore } from '../stores/fileSystem'
+import { useProjectStore } from '../stores/project'
 import { getAllFilePaths, exportFilesToZip } from '../composables/useFileExport'
+import { clearRecoveryState } from '../composables/useRecovery'
 import {
   getStoredToken,
   storeToken,
@@ -327,6 +329,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'export'])
 
 const fsStore = useFileSystemStore()
+const projectStore = useProjectStore()
 
 // Common state
 const destination = ref('zip') // 'zip' | 'github'
@@ -388,6 +391,8 @@ const targetRepoName = computed(() => {
 watch(() => props.visible, (visible) => {
   if (visible) {
     selectAll()
+    // Set export name from workspace name
+    exportName.value = projectStore.workspaceName || 'project'
     // Load stored token
     const stored = getStoredToken()
     if (stored) {
@@ -483,6 +488,8 @@ async function exportToZip() {
 
   try {
     await exportFilesToZip(fsStore.fileTree, selectedFiles.value, exportName.value)
+    // Clear recovery state since work is now safely exported
+    await clearRecoveryState()
     emit('export', { count: selectedFiles.value.size, name: exportName.value, destination: 'zip' })
     cancel()
   } catch (e) {
@@ -586,6 +593,8 @@ async function pushToGitHub() {
     )
 
     successResult.value = result
+    // Clear recovery state since work is now safely in GitHub
+    await clearRecoveryState()
     emit('export', {
       count: files.length,
       destination: 'github',

@@ -3,9 +3,6 @@
     <Header />
 
     <div class="flex-1 flex overflow-hidden">
-      <!-- Project Menu Sidebar -->
-      <ProjectMenu />
-
       <!-- File Tree -->
       <FileTree />
 
@@ -39,7 +36,6 @@ import Header from '../components/Header.vue'
 import CodeEditor from '../components/CodeEditor.vue'
 import Preview from '../components/Preview.vue'
 import CollaborationPanel from '../components/CollaborationPanel.vue'
-import ProjectMenu from '../components/ProjectMenu.vue'
 import FileTree from '../components/FileTree.vue'
 
 // Resizable editor width
