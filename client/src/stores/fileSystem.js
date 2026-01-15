@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { useEditorStore } from './editor'
 import { useCollaborationStore } from './collaboration'
+import { useProjectStore } from './project'
 
 export const useFileSystemStore = defineStore('fileSystem', () => {
   // Get collaboration store (lazy initialization to avoid circular dependencies)
@@ -569,7 +570,14 @@ export const useFileSystemStore = defineStore('fileSystem', () => {
       }
     }
     activeFilePath.value = '/index.html'
+    previewHtmlFile.value = '/index.html'
+    previewCssFile.value = '/styles.css'
+    previewJsFile.value = '/script.js'
     expandedDirs.value = new Set(['/'])
+
+    // Also reset the project store
+    const projectStore = useProjectStore()
+    projectStore.resetWorkspace()
   }
 
   // Auto-detect preview files based on common naming conventions
