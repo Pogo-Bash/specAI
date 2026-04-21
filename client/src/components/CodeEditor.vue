@@ -18,8 +18,8 @@
       <!-- Line Numbers -->
       <div
         ref="lineNumbers"
-        class="line-numbers bg-[#1e1e1e] text-[#858585] font-mono text-sm leading-[1.6] text-right select-none overflow-hidden border-r border-[#3e3e42] whitespace-pre px-3 py-5"
-        style="min-width: 50px;"
+        class="line-numbers bg-[#1e1e1e] text-[#858585] text-right select-none overflow-hidden border-r border-[#3e3e42] whitespace-pre px-3 py-5"
+        :style="[editorTextStyle, { minWidth: '50px' }]"
       >
         <div v-for="lineNum in totalLines" :key="lineNum">{{ lineNum }}</div>
       </div>
@@ -34,8 +34,8 @@
         ><code
           ref="highlightCode"
           :class="`language-${getLanguageClass()}`"
-          class="block m-0 p-0 border-0 bg-transparent font-mono whitespace-pre"
-          style="font-size: 14px; line-height: 1.6;"
+          class="block m-0 p-0 border-0 bg-transparent whitespace-pre"
+          :style="editorTextStyle"
           v-html="highlightedCode"
         ></code></pre>
 
@@ -49,7 +49,7 @@
           @click="emitCursorPosition"
           @select="emitCursorPosition"
           class="absolute inset-0 w-full h-full p-5 m-0 border-0 bg-transparent resize-none overflow-auto z-[2] whitespace-pre focus:outline-none"
-          style="color: transparent; caret-color: white; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; line-height: 1.6; tab-size: 4; -moz-tab-size: 4;"
+          :style="[editorTextStyle, { color: 'transparent', caretColor: 'white' }]"
           :placeholder="`Enter code here...`"
           spellcheck="false"
         ></textarea>
@@ -187,6 +187,20 @@ let consoleResizeStartHeight = 0
 const emojiSuggestions = ref([])
 const selectedEmojiIndex = ref(0)
 const emojiPopupPos = ref({ x: 0, y: 0 })
+
+// Single source of truth for editor text metrics — both the textarea (where the
+// native caret lives) and the highlight layer MUST render every character at
+// identical x/y for the caret to sit on the correct glyph.
+const editorTextStyle = {
+  fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
+  fontSize: '14px',
+  lineHeight: '1.6',
+  letterSpacing: '0',
+  tabSize: '4',
+  MozTabSize: '4',
+  fontVariantLigatures: 'none',
+  fontFeatureSettings: '"liga" 0, "calt" 0',
+}
 
 const consoleMessages = computed(() => editorStore.consoleMessages)
 const currentSyntaxError = computed(() => {
