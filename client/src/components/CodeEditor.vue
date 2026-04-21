@@ -332,21 +332,10 @@ watch(() => fsStore.activeFilePath, () => {
 })
 
 function handleCodeChange() {
-  // Mark this as a local edit so the watcher knows to sync scroll
+  // Tell the currentCode watcher this update originated locally so it
+  // doesn't try to preserve scroll/selection against the user's typing.
   isLocalEdit.value = true
-
-  // Update syntax highlighting
-  updateHighlighting()
-
-  // Sync textarea and highlight layers for local edits
-  nextTick(() => {
-    if (editorTextarea.value && highlightLayer.value) {
-      highlightLayer.value.scrollTop = editorTextarea.value.scrollTop
-      highlightLayer.value.scrollLeft = editorTextarea.value.scrollLeft
-    }
-    // Reset the flag after this tick
-    isLocalEdit.value = false
-  })
+  nextTick(() => { isLocalEdit.value = false })
 
   // Check for emoji autocomplete
   checkEmojiAutocomplete()
@@ -635,37 +624,57 @@ function handleKeyDown(event) {
   }
 }
 
-// Track scroll position for remote updates to prevent auto-scrolling
-// Simple approach: track if the change came from local user input
+// True for the duration of a local @input tick; tells the watcher below
+// that the local user drove this change, so we shouldn't fight their
+// typing by restoring scroll/selection.
 const isLocalEdit = ref(false)
 
-// Watch for code changes from collaboration or other sources
-watch(() => currentCode.value, () => {
+// Watch for code changes (local typing, remote collab updates, file switches,
+// code imports). Uses flush: 'pre' so we capture the textarea's scroll and
+// selection state BEFORE Vue patches the new value in. Past attempts saved
+// after the patch, by which point the browser had already auto-scrolled to
+// keep the (now-different) selection visible — the "weird shift" on remote
+// typing. After the patch, we override back to the saved position.
+watch(() => currentCode.value, (newVal) => {
+  const textarea = editorTextarea.value
+  const isRemote = !isLocalEdit.value
+  const preserve = (isRemote && textarea) ? {
+    scrollTop: textarea.scrollTop,
+    scrollLeft: textarea.scrollLeft,
+    selStart: textarea.selectionStart,
+    selEnd: textarea.selectionEnd,
+    hadFocus: document.activeElement === textarea,
+  } : null
+
   updateHighlighting()
 
   nextTick(() => {
-    if (editorTextarea.value) {
-      // Only sync scroll position if this was a LOCAL edit
-      // For remote updates, don't touch scroll at all - this prevents the jump
-      if (isLocalEdit.value) {
-        scrollPosition.value = {
-          top: editorTextarea.value.scrollTop,
-          left: editorTextarea.value.scrollLeft
-        }
+    const ta = editorTextarea.value
+    if (!ta) return
 
-        // Sync highlight layer with textarea scroll (user is scrolling/typing)
-        if (highlightLayer.value) {
-          highlightLayer.value.scrollTop = editorTextarea.value.scrollTop
-          highlightLayer.value.scrollLeft = editorTextarea.value.scrollLeft
-        }
-        if (lineNumbers.value) {
-          lineNumbers.value.scrollTop = editorTextarea.value.scrollTop
-        }
+    if (preserve) {
+      // Restore selection first (may trigger browser scroll-to-selection),
+      // then scroll, so the scroll assignment wins.
+      const max = newVal.length
+      if (preserve.hadFocus) {
+        ta.selectionStart = Math.min(preserve.selStart, max)
+        ta.selectionEnd = Math.min(preserve.selEnd, max)
       }
-      // For remote updates: highlighting is updated but scroll is untouched
+      ta.scrollTop = preserve.scrollTop
+      ta.scrollLeft = preserve.scrollLeft
     }
+
+    // Always keep the gutter and highlight layer locked to the textarea.
+    if (highlightLayer.value) {
+      highlightLayer.value.scrollTop = ta.scrollTop
+      highlightLayer.value.scrollLeft = ta.scrollLeft
+    }
+    if (lineNumbers.value) {
+      lineNumbers.value.scrollTop = ta.scrollTop
+    }
+    scrollPosition.value = { top: ta.scrollTop, left: ta.scrollLeft }
   })
-})
+}, { flush: 'pre' })
 
 // Initialize on mount
 onMounted(() => {
